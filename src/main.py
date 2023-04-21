@@ -13,7 +13,9 @@ import pandas as pd
 from pathlib import Path
 import seaborn as sns
 import matplotlib.pyplot as plt
+import math
 import openpyxl
+import numpy as np
 
 
 def parse_file(file):
@@ -29,6 +31,7 @@ def parse_file(file):
 
     # read information out of filename (be careful to name correctly!!)
     part_list = str(file.stem).split('_')
+    df['ID']=int(part_list[2])
     df['biol_replic']=part_list[3]
     df['treatment']=part_list[4]
     df['dilution']=int(part_list[5][3:])
@@ -41,17 +44,49 @@ def parse_file(file):
     df = df.drop(columns=['Number', 'Volume / nm^3','Area / nm^2','Concentration / cm-3'])
     return df
 
-def plot_hist(df, binwidth = 5, export = False):
+def plot_bars(df, export = False):
     #plot histograms:
     # Get list of unique cell lines
     cell_lines = df['biol_replic'].unique()
-
+    nrows = math.floor(math.sqrt(len(cell_lines)))
+    ncols = math.ceil(math.sqrt(len(cell_lines)))
     # Create subplot grid
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(10, 8))
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 8),
+                             sharey=True)
+    
+    for i, cell_line in enumerate(cell_lines):
+        row = i // nrows
+        col = i % ncols
+        ax = axes[row, col]
+
+        p_data = df.loc[df['biol_replic'] == cell_line]
+        sns.barplot(data=p_data, x='treatment', y='EV_count/Cell_count', ax=ax)
+        ax.set_title('Cell line {}'.format(cell_line))
+    # Add overall title and axis labels
+    figtitle='Barplots by cell line and treatment EVcount divided by Cellcount.'
+    plt.suptitle(figtitle)
+
+    # Adjust spacing between plots
+    plt.tight_layout()
+
+    # Show plot
+    plt.show()
+    if export:
+       fig.savefig(Path(export, figtitle + ' .png'), format='png', dpi=300, bbox_inches='tight') 
+
+
+def plot_hist(df, binwidth = 5, export = False, binexport = False):
+    #plot histograms:
+    # Get list of unique cell lines
+    cell_lines = df['biol_replic'].unique()
+    nrows = math.floor(math.sqrt(len(cell_lines)))
+    ncols = math.ceil(math.sqrt(len(cell_lines)))
+    # Create subplot grid
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 8))
 
     for i, cell_line in enumerate(cell_lines):
-        row = i // 2
-        col = i % 2
+        row = i // nrows
+        col = i % ncols
         ax = axes[row, col]
 
         p_data = df.loc[df['biol_replic'] == cell_line]
@@ -72,8 +107,18 @@ def plot_hist(df, binwidth = 5, export = False):
     plt.show()
     if export:
        fig.savefig(Path(export, figtitle + ' .png'), format='png', dpi=300, bbox_inches='tight') 
+    if binexport:
+        # Compute the histogram using numpy
+        bins = np.arange(p_data['Size / nm'].min(), p_data['Size / nm'].max() + binwidth, binwidth)
+        counts, bin_edges = np.histogram(p_data['Size / nm'], bins=bins, weights=p_data['conc_corr_norm'])
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        bin_magnitudes = counts * binwidth
 
-INPUT_DIR = Path('/mnt/c/Projects/Data/ev_sizes')
+        # Convert the bin centers and magnitudes to a pandas dataframe
+        bin_data = pd.DataFrame({'bin_center': bin_centers, 'bin_magnitude': bin_magnitudes})
+        bin_data.to_excel(Path(export, 'bin_data_Binsize' + str(binwidth) + 'nm.xlsx'))
+
+INPUT_DIR = Path('/mnt/c/Projects/Data/230421_ev_sizes')
 FIRST_LINE =74
 # generate folder for headerless files
 NO_HEAD_DIR = Path(INPUT_DIR, 'no_head')
@@ -84,6 +129,8 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 file_list= list(INPUT_DIR.glob('*.txt'))
 df_master = pd.DataFrame()
+
+xlsx_list= list(INPUT_DIR.glob('*.xlsx'))
 
 for file in file_list:
     # remove header from file and put it in headerless folder
@@ -97,6 +144,13 @@ for file in file_list:
     # append to master dataframe
     df_master = pd.concat([df_master, df])
 df_master.reset_index(drop=True, inplace=True)
+
+for file in xlsx_list:
+    df_desc = pd.read_excel(file)
+
+df_master = pd.merge(df_master, df_desc, on='ID', suffixes=('', '_desc'))
+df_master = df_master.drop(
+    columns=[col for col in df_master.columns if col.endswith('_desc')])
 
 #clean up some errors in User Input, make all treatment lower case
 df_master['treatment']=df_master['treatment'].str.lower()
@@ -116,10 +170,11 @@ min_cutoff = 30
 df_master=df_master.loc[df_master['Size / nm'] > min_cutoff]
 
 # normalize each technical replicate by their own total concentration
-# get sum for each treatment of each tech_replic of each biol_replic
+# first step: get sum of EVs across all sizes
+# for each treatment of each tech_replic of each biol_replic
 sum_conc = df_master.groupby(['biol_replic', 'tech_replic', 'treatment'])['conc_corr'].transform('sum')
 
-# normalization to 1
+# second step: normalization to 1
 df_master['sum'] = sum_conc
 df_master['conc_corr_norm'] = df_master['conc_corr'] / sum_conc
 
@@ -151,12 +206,30 @@ is_large_class = (df_avg['Size / nm'] >= 151) & (df_avg['Size / nm'] <= 800)
 df_avg.loc[is_small_class, 'Size_Class'] = 'small_class'
 df_avg.loc[is_large_class, 'Size_Class'] = 'large_class'
 
-plot_hist(df_avg, binwidth=2.5, export = OUTPUT_DIR)
-plot_hist(df_avg, binwidth=5, export = OUTPUT_DIR)
-plot_hist(df_avg, binwidth=10, export = OUTPUT_DIR)
-plot_hist(df_avg, binwidth=20, export = OUTPUT_DIR)
-plot_hist(df_avg, binwidth=50, export = OUTPUT_DIR)
-plot_hist(df_avg, binwidth=120, export = OUTPUT_DIR)
+# add normalized EV count by Cellcount 
+df_count_EV = df_master.groupby(['biol_replic', 'tech_replic', 'treatment'])[
+    'Living Events/μL(V)','sum'].mean()
+df_count_EV = df_count_EV.reset_index()
+df_count_EV['EV/Cellcount'] = df_count_EV['sum'] / df_count_EV['Living Events/μL(V)']
+#get average and std
+df_count_stat = pd.DataFrame()
+df_count_stat['mean'] = df_count_EV.groupby(['biol_replic', 'treatment'])['EV/Cellcount'].mean()
+df_count_stat['std'] = df_count_EV.groupby(['biol_replic', 'treatment'])['EV/Cellcount'].std()
+df_count_stat = df_count_stat.rename(columns={'mean': 'EV_count/Cell_count'})
+df_count_stat = df_count_stat.reset_index()
+
+# sns.barplot(x='treatment', y='mean', hue='biol_replic', data=df_count_stat)
+plot_bars(df_count_stat, export = OUTPUT_DIR)
+
+df_count_stat.to_excel(Path(OUTPUT_DIR, 'data_EV_by_cell_mean_std.xlsx'))
+df_count_EV.to_excel(Path(OUTPUT_DIR, 'data_EV_by_cell.xlsx'))
+
+plot_hist(df_avg, binwidth=2.5, export = OUTPUT_DIR, binexport = True)
+plot_hist(df_avg, binwidth=5, export = OUTPUT_DIR, binexport = True)
+plot_hist(df_avg, binwidth=10, export = OUTPUT_DIR, binexport = True)
+plot_hist(df_avg, binwidth=20, export = OUTPUT_DIR, binexport = True)
+plot_hist(df_avg, binwidth=50, export = OUTPUT_DIR, binexport = True)
+plot_hist(df_avg, binwidth=120, export = OUTPUT_DIR, binexport = True)
 
 #export table to excel
 df_avg.to_excel(Path(OUTPUT_DIR, 'data_long_table.xlsx'))
