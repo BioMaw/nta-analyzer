@@ -78,27 +78,37 @@ def plot_bars(df, export = False):
 def plot_hist(df, binwidth = 5, export = False, binexport = False):
     #plot histograms:
     # Get list of unique cell lines
+    # sns.set(font_scale=1.2)  # Increase the font size by specifying the font_scale value
+    # sns.set_style("white")  # Set the style to "white" to remove the grid
+    sns.set(style="ticks", font_scale=1.2)  # Set the style to "ticks" and specify font_scale value
+
     cell_lines = df['biol_replic'].unique()
     nrows = math.floor(math.sqrt(len(cell_lines)))
     ncols = math.ceil(math.sqrt(len(cell_lines)))
     # Create subplot grid
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 8))
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, 
+                             figsize=(10, 8), sharey=True)
 
     for i, cell_line in enumerate(cell_lines):
         row = i // nrows
         col = i % ncols
-        ax = axes[row, col]
+        if axes.ndim == 2:
+            ax = axes[row, col]
+        else:
+            ax = axes[-i]
 
         p_data = df.loc[df['biol_replic'] == cell_line]
         sns.histplot(data=p_data, x='Size / nm', weights='conc_corr_norm', 
-                    hue='treatment',  binwidth=binwidth, ax=ax)
+                    hue='treatment',  binwidth=binwidth, ax=ax,
+                    edgecolor='black')
         ax.set_title('Cell line {}'.format(cell_line))
+        ax.set_ylabel('Probability')  # Set the xlabel
 
     # Add overall title and axis labels
     figtitle='Histograms by cell line and treatment. Binsize = ' + str(binwidth) + ' nm'
     plt.suptitle(figtitle)
-    fig.text(0.5, 0.04, 'Size / nm', ha='center')
-    fig.text(0.04, 0.5, 'Probability Mass Function', va='center', rotation='vertical')
+    # fig.text(0.5, 0.04, 'Size / nm', ha='center')
+    # fig.text(0.04, 0.5, 'Probability Mass Function', va='center', rotation='vertical')
 
     # Adjust spacing between plots
     plt.tight_layout()
@@ -162,7 +172,7 @@ df_master = df_master.loc[df_master['dilution'] != 200]
 # truncate based on size
 # cut off above the highest occuring size
 #max_valid_size = max(df_master.loc[df_master['conc_corr'] != 0, 'Size / nm'].unique())
-max_valid_size = 800
+max_valid_size = 600
 df_master=df_master.loc[df_master['Size / nm'] < max_valid_size]
 
 # cut off below 30 nm 
@@ -192,44 +202,57 @@ df_avg = df_master.groupby(['biol_replic', 'treatment', 'Size / nm']).mean()
 df_avg.reset_index(inplace=True)
 df_avg.drop(columns='tech_replic', inplace=True)
 
-# Calculate mean within each group
-mean_df = df_avg.groupby(['biol_replic', 'treatment'])[['Size / nm', 'conc_corr_norm']].apply(
-    lambda x: (x['Size / nm'] * x['conc_corr_norm']).sum() / x['conc_corr_norm'].sum())
+# # Calculate mean within each group
+# mean_df = df_avg.groupby(['biol_replic', 'treatment'])[['Size / nm', 'conc_corr_norm']].apply(
+#     lambda x: (x['Size / nm'] * x['conc_corr_norm']).sum() / x['conc_corr_norm'].sum())
 
-# Rename columns
-mean_df = mean_df.reset_index()
-mean_df.columns = ['biol_replic', 'treatment', 'Mean']
+# # Rename columns
+# mean_df = mean_df.reset_index()
+# mean_df.columns = ['biol_replic', 'treatment', 'Mean']
 
-# add classification based on size
-is_small_class = (df_avg['Size / nm'] > 30) & (df_avg['Size / nm'] <= 150) 
-is_large_class = (df_avg['Size / nm'] >= 151) & (df_avg['Size / nm'] <= 800)
-df_avg.loc[is_small_class, 'Size_Class'] = 'small_class'
-df_avg.loc[is_large_class, 'Size_Class'] = 'large_class'
+# # add classification based on size
+# is_small_class = (df_avg['Size / nm'] > 30) & (df_avg['Size / nm'] <= 150) 
+# is_large_class = (df_avg['Size / nm'] >= 151) & (df_avg['Size / nm'] <= 800)
+# df_avg.loc[is_small_class, 'Size_Class'] = 'small_class'
+# df_avg.loc[is_large_class, 'Size_Class'] = 'large_class'
 
-# add normalized EV count by Cellcount 
-df_count_EV = df_master.groupby(['biol_replic', 'tech_replic', 'treatment'])[
-    'Living Events/μL(V)','sum'].mean()
-df_count_EV = df_count_EV.reset_index()
-df_count_EV['EV/Cellcount'] = df_count_EV['sum'] / df_count_EV['Living Events/μL(V)']
-#get average and std
-df_count_stat = pd.DataFrame()
-df_count_stat['mean'] = df_count_EV.groupby(['biol_replic', 'treatment'])['EV/Cellcount'].mean()
-df_count_stat['std'] = df_count_EV.groupby(['biol_replic', 'treatment'])['EV/Cellcount'].std()
-df_count_stat = df_count_stat.rename(columns={'mean': 'EV_count/Cell_count'})
-df_count_stat = df_count_stat.reset_index()
+# # add normalized EV count by Cellcount 
+# df_count_EV = df_master.groupby(['biol_replic', 'tech_replic', 'treatment'])[
+#     'Living Events/μL(V)','sum'].mean()
+# df_count_EV = df_count_EV.reset_index()
+# df_count_EV['EV/Cellcount'] = df_count_EV['sum'] / df_count_EV['Living Events/μL(V)']
+# #get average and std
+# df_count_stat = pd.DataFrame()
+# df_count_stat['mean'] = df_count_EV.groupby(['biol_replic', 'treatment'])['EV/Cellcount'].mean()
+# df_count_stat['std'] = df_count_EV.groupby(['biol_replic', 'treatment'])['EV/Cellcount'].std()
+# df_count_stat = df_count_stat.rename(columns={'mean': 'EV_count/Cell_count'})
+# df_count_stat = df_count_stat.reset_index()
 
-# sns.barplot(x='treatment', y='mean', hue='biol_replic', data=df_count_stat)
-plot_bars(df_count_stat, export = OUTPUT_DIR)
+# # sns.barplot(x='treatment', y='mean', hue='biol_replic', data=df_count_stat)
+# plot_bars(df_count_stat, export = OUTPUT_DIR)
 
-df_count_stat.to_excel(Path(OUTPUT_DIR, 'data_EV_by_cell_mean_std.xlsx'))
-df_count_EV.to_excel(Path(OUTPUT_DIR, 'data_EV_by_cell.xlsx'))
+# df_count_stat.to_excel(Path(OUTPUT_DIR, 'data_EV_by_cell_mean_std.xlsx'))
+# df_count_EV.to_excel(Path(OUTPUT_DIR, 'data_EV_by_cell.xlsx'))
 
-plot_hist(df_avg, binwidth=2.5, export = OUTPUT_DIR, binexport = True)
-plot_hist(df_avg, binwidth=5, export = OUTPUT_DIR, binexport = True)
-plot_hist(df_avg, binwidth=10, export = OUTPUT_DIR, binexport = True)
-plot_hist(df_avg, binwidth=20, export = OUTPUT_DIR, binexport = True)
-plot_hist(df_avg, binwidth=50, export = OUTPUT_DIR, binexport = True)
-plot_hist(df_avg, binwidth=120, export = OUTPUT_DIR, binexport = True)
+# plot_hist(df_avg, binwidth=2.5, export = OUTPUT_DIR, binexport = True)
+# plot_hist(df_avg, binwidth=5, export = OUTPUT_DIR, binexport = True)
+# plot_hist(df_avg, binwidth=10, export = OUTPUT_DIR, binexport = True)
+# plot_hist(df_avg, binwidth=20, export = OUTPUT_DIR, binexport = True)
+# plot_hist(df_avg, binwidth=50, export = OUTPUT_DIR, binexport = True)
+# plot_hist(df_avg, binwidth=120, export = OUTPUT_DIR, binexport = True)
+
+
+df_avg = df_avg[df_avg['biol_replic'] != 'AMLKO14A']
+
+# Create separate groups for 'AML' and 'MLL' entries
+df_avg.loc[df_avg['biol_replic'].str.startswith('AML'), 'biol_replic'] = 'AML'
+df_avg.loc[df_avg['biol_replic'].str.startswith('MLL'), 'biol_replic'] = 'MLL'
+
+# Apply mean function to 'conc_corr_norm' for each group
+df_pooled = df_avg.groupby(['biol_replic', 'Size / nm', 'treatment'])['conc_corr_norm'].mean().reset_index()
+
+# df_final now contains the desired DataFrame with 'AMLKO14A' removed and 'conc_corr_norm' pooled for 'AML' and 'MLL' entries
+plot_hist(df_pooled, binwidth=50, export = OUTPUT_DIR, binexport = True)
 
 #export table to excel
 df_avg.to_excel(Path(OUTPUT_DIR, 'data_long_table.xlsx'))
