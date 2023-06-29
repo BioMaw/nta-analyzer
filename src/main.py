@@ -56,8 +56,10 @@ def plot_bars(df, export=False):
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 8), sharey=True)
 
     for i, cell_line in enumerate(cell_lines):
-        row = i // nrows
+        row = i // ncols
         col = i % ncols
+        print(str(row))
+        print(str(col))
         if np.ndim(axes) == 2:
             ax = axes[row, col]
         else:
@@ -98,7 +100,7 @@ def plot_hist(df, binwidth=5, export=False, binexport=False):
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 8), sharey=True)
 
     for i, cell_line in enumerate(cell_lines):
-        row = i // nrows
+        row = i // ncols
         col = i % ncols
         if np.ndim(axes) == 2:
             ax = axes[row, col]
@@ -161,7 +163,7 @@ def plot_hist(df, binwidth=5, export=False, binexport=False):
         )
         bin_data.to_excel(Path(export, "bin_data_Binsize" + str(binwidth) + "nm.xlsx"))
 
-INPUT_DIR = Path("/mnt/c/Projects/Data/ev_sizes_may2023_cbd")
+INPUT_DIR = Path("/mnt/c/Projects/Data/WT_KO")
 FIRST_LINE = 74
 # generate folder for headerless files
 NO_HEAD_DIR = Path(INPUT_DIR, "no_head")
